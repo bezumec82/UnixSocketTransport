@@ -1,6 +1,6 @@
 cmake_minimum_required( VERSION 3.14 )
 
-project( UnixSocket LANGUAGES CXX )
+project( UnixSocketTransport LANGUAGES CXX )
 
 ###########
 ### Library
