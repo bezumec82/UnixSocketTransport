@@ -25,6 +25,17 @@ Result Server::send( const ::std::string& client_name, Data&& data )
     }
 }
 
+template< typename Data >
+Result Server::broadCast( Data&& data )
+{
+    for( auto& it : m_id_sessions_map )
+    {
+        it.second->send( ::std::forward<Data>(data) );
+    }
+    return Result::SEND_SUCCESS;
+}
+
+
 } //end namespace UnixSocket
 
-#endif /* UNXI_SOCKET_SERVER_HPP */
+#endif /* UNIX_SOCKET_SERVER_HPP */

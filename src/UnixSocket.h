@@ -145,6 +145,8 @@ namespace UnixSocket
         Result start( void );
         template< typename Data >
         Result send( const ::std::string& , Data&& );
+        template< typename Data >
+        Result broadCast( Data&& );
         ~Server();
     private :
         void accept( void );

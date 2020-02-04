@@ -5,7 +5,7 @@
 
 #include "UnixSocket.h"
 
-void serverReadCallBack( ::std::string data )
+void serverrecvCallBack( ::std::string data )
 {
     ::std::cout << __func__ << " : "
                 << "Server received data : " 
@@ -20,7 +20,7 @@ void serverSendCallBack( ::std::size_t sent_bytes )
                 << ::std::endl;
 }
 
-void clientReadCallBack( ::std::string data )
+void clientrecvCallBack( ::std::string data )
 {
     ::std::cout << __func__ << " : "
                 << "Client received data : " 
@@ -44,7 +44,7 @@ int main( int , char** )
         ::UnixSocket::Server server;
         ::UnixSocket::Server::Config config = 
         {
-            .m_recv_cb      = serverReadCallBack,
+            .m_recv_cb      = serverrecvCallBack,
             .m_send_cb      = serverSendCallBack,
             .m_address      = "/tmp/UnixSocketServer",
             .m_delimiter    = "body",
@@ -56,7 +56,7 @@ int main( int , char** )
         ::UnixSocket::Client asyncClient;
         ::UnixSocket::Client::Config asyncConfig =
         {
-            .m_recv_cb      = clientReadCallBack,
+            .m_recv_cb      = clientrecvCallBack,
             .m_send_cb      = clientSendCallBack,
             .m_address      = "/tmp/UnixSocketServer",
             .m_delimiter    = "body",
@@ -71,7 +71,7 @@ int main( int , char** )
         ::UnixSocket::Client syncClient;
         ::UnixSocket::Client::Config syncConfig =
         {
-            .m_recv_cb      = clientReadCallBack,
+            .m_recv_cb      = clientrecvCallBack,
             .m_send_cb      = clientSendCallBack,
             .m_address      = "/tmp/UnixSocketServer",
             .m_delimiter    = "body",
