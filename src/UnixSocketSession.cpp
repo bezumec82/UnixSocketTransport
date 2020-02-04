@@ -13,6 +13,7 @@ void Server::Session::recv()
     {
         delimiter = ::std::string{ "</" + m_parent_ptr->getConfig().m_delimiter + ">" };
     }
+    m_read_buf.clear();
     m_read_buf.reserve( 1024 );
     ::boost::asio::async_read_until( m_socket,
     ::boost::asio::dynamic_buffer( m_read_buf ),
@@ -46,7 +47,11 @@ Result Server::Session::identification( const ::std::string& in_data )
 {
     /* Actual parsing here */
     Tree xml_tree;
-    ::std::istringstream xml_stream( in_data );
+    // ::std::istringstream xml_stream( in_data ); //needless copy
+    /* Avoids copy : */
+    boost::iostreams::stream< \
+        boost::iostreams::array_source > \
+            xml_stream( in_data.c_str(), in_data.size() );
     PropTree::read_xml( xml_stream, xml_tree );
     try {
         ::std::string key = xml_tree.get<std::string>( m_parent_ptr->getConfig().m_id_key );
