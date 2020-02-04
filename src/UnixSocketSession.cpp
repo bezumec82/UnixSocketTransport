@@ -13,12 +13,18 @@ void Server::Session::recv()
     {
         delimiter = ::std::string{ "</" + m_parent_ptr->getConfig().m_delimiter + ">" };
     }
-    m_read_buf.clear();
-    m_read_buf.reserve( 1024 );
+
+    /* Usage of static buffer is abandoned in favour of multithread implementation */
+    // m_read_buf.clear();
+    // m_read_buf.reserve( READ_BUF_SIZE );
+
+    BufferShPtr read_buf_shptr = ::std::make_shared< Buffer >();
+    read_buf_shptr->reserve( READ_BUF_SIZE );
+
     ::boost::asio::async_read_until( m_socket,
-    ::boost::asio::dynamic_buffer( m_read_buf ),
+    ::boost::asio::dynamic_buffer( * read_buf_shptr ),
     delimiter,
-    [&] ( const ErrCode& error, 
+    [ &, read_buf_shptr ] ( const ErrCode& error, 
         ::std::size_t bytes_transferred ) //mutable
     {
         if( error )
@@ -34,11 +40,10 @@ void Server::Session::recv()
 
         if( ! m_is_identified.load() )
         {
-            identification(m_read_buf );
+            identification( * read_buf_shptr );
         } else { /* Give access to data after identification. */
-            m_parent_ptr->getConfig().m_recv_cb( m_read_buf );
+            m_parent_ptr->getConfig().m_recv_cb( * read_buf_shptr );
         } //end if
-        m_read_buf.clear();
         this->recv();
     } ); //end async_read_until
 }

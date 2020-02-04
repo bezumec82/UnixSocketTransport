@@ -8,9 +8,9 @@ using namespace UnixSocket;
 Result Client::setConfig( Config&& cfg )
 {
     m_config = cfg;
-    ERR_CHECK( m_config.m_address,       "file name" );
+    ERR_CHECK( m_config.m_address,     "file name" );
     ERR_CHECK( m_config.m_id_key,      "identification" );
-    ERR_CHECK( m_config.m_delimiter,     "delimiter" );
+    ERR_CHECK( m_config.m_delimiter,   "delimiter" );
     ERR_CHECK( m_config.m_client_id,   "client name" );
     if( ! m_config.m_recv_cb )
     {
@@ -110,11 +110,18 @@ void Client::identify( void )
 
 void Client::recv( void )
 {
-    m_read_buf.reserve( 1024 );
+    /* Usage of static buffer is abandoned in favour of multithread implementation. 
+     * Each recv handler will have its own buffer */
+    // m_read_buf.clear();
+    // m_read_buf.reserve( READ_BUF_SIZE );
+
+    BufferShPtr read_buf_shptr = ::std::make_shared< Buffer >();
+    read_buf_shptr->reserve( READ_BUF_SIZE );
+
     ::boost::asio::async_read_until( * m_socket_uptr,
-    ::boost::asio::dynamic_buffer( m_read_buf ),
+    ::boost::asio::dynamic_buffer( * read_buf_shptr ),
     ::std::string{ "</" + m_config.m_delimiter + ">" },
-    [&] ( const ErrCode& error, 
+    [ & , read_buf_shptr ] ( const ErrCode& error, 
     ::std::size_t bytes_transferred ) //mutable
     {
         if( error )
@@ -126,7 +133,7 @@ void Client::recv( void )
             }
             return;
         }
-        m_config.m_recv_cb( m_read_buf );
+        m_config.m_recv_cb( * read_buf_shptr );
         m_read_buf.clear();
         this->recv();
     } ); //end async_read_until

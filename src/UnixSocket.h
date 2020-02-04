@@ -40,6 +40,9 @@ namespace UnixSocket
     using SocketUptr    = ::std::unique_ptr< Socket >;
     using RecvCallBack  = ::std::function< void( ::std::string ) >;
     using SendCallBack  = ::std::function< void( ::std::size_t ) >;
+
+    using Buffer = ::std::string;
+    using BufferShPtr = ::std::shared_ptr< Buffer >;
 }
 
 namespace UnixSocket
@@ -115,6 +118,7 @@ namespace UnixSocket
         private : /*--- Variables ---*/
             Socket m_socket;
             Server * m_parent_ptr;
+            const int READ_BUF_SIZE = 1024;
             ::std::string m_read_buf;
             SessionHandle m_self;
                 // save iterator to yourself
@@ -200,7 +204,10 @@ namespace UnixSocket
         
         IoService m_io_service;
         ::std::thread m_worker;
+
+        const int READ_BUF_SIZE = 1024;
         ::std::string m_read_buf;
+
         /*--- Flags ---*/
         ::std::atomic< bool > m_is_configured{ false };
         ::std::atomic<bool> m_is_connected{ false };
