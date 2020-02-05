@@ -152,12 +152,14 @@ namespace UnixSocket
         void accept( void );
 
     private : /*--- Variables ---*/
+        
         Config m_config;
         AcceptorUptr m_acceptor_uptr;
         Sessions m_sessions; /* Server should know about all opened sessions */
         IdentifiedSessions m_id_sessions_map;
         IoService m_io_service; /* Initialized with class creation */
         ::std::thread m_worker;
+        ::std::future<void> m_future;
         /*--- Flags ---*/
         ::std::atomic< bool > m_is_configured{ false };
     }; //end class Server
@@ -206,6 +208,7 @@ namespace UnixSocket
         
         IoService m_io_service;
         ::std::thread m_worker;
+        ::std::future<void> m_future;
 
         const int READ_BUF_SIZE = 1024;
         ::std::string m_read_buf;

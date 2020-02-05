@@ -40,9 +40,12 @@ Result Client::start( void )
     m_socket_uptr = ::std::make_unique< Socket >(m_io_service);
     m_endpoint_uptr = ::std::make_unique< EndPoint >( m_config.m_address );
     connect(m_config.m_con_type);
-    m_worker = ::std::move( 
-        ::std::thread( [&](){ m_io_service.run(); } )
-    );
+    auto work = [&](){ m_io_service.run(); };
+#ifdef THREAD_IMPLEMENTATION
+    m_worker = ::std::move( ::std::thread( work ) );
+#else
+    m_future = ::std::async( work );
+#endif
     return Result::ALL_GOOD;
 }
 
@@ -142,7 +145,11 @@ void Client::recv( void )
 Client::~Client()
 {
     m_io_service.stop();
+#ifdef THREAD_IMPLEMENTATION
     m_worker.join();
+#else
+    m_future.get();
+#endif
     if( m_socket_uptr->is_open() )
     {
         m_socket_uptr->shutdown( Socket::shutdown_both );

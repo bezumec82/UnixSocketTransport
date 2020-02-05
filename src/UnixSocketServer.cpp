@@ -36,9 +36,12 @@ Result Server::start( void )
     // PRINTF( RED, "Starting Unix server '%s'", m_config.m_address.c_str() );
     m_acceptor_uptr = ::std::make_unique< Acceptor >( m_io_service , EndPoint{ m_config.m_address } );
     accept(); /* Recursive async call inside */
-    m_worker = ::std::move( 
-        ::std::thread( [&](){ m_io_service.run(); } )
-    );
+    auto work = [&](){ m_io_service.run(); };
+#ifdef THREAD_IMPLEMENTATION
+    m_worker = ::std::move( ::std::thread( work ) );
+#else
+    m_future = ::std::async( work );
+#endif
     return Result::ALL_GOOD;
 }
 
@@ -71,7 +74,11 @@ Server::~Server()
     m_sessions.clear();
     /* Stop handling events */
     m_io_service.stop();
+#ifdef THREAD_IMPLEMENTATION
     m_worker.join();
+#else
+    m_future.get();
+#endif
     PRINTF( YEL, "Server destroyed.\n" );
 }
 
