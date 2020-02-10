@@ -5,35 +5,56 @@
 
 #include "UnixSocket.h"
 
-void serverrecvCallBack( ::std::string data )
+/*--------------------------*/
+/*--- Server's callbacks ---*/
+/*--------------------------*/
+void serverrecvCallBack( const ::std::string& client_id, ::std::string& data )
 {
     ::std::cout << __func__ << " : "
-                << "Server received data : " 
-                << data << ::std::endl;
-}
-
-void serverSendCallBack( ::std::size_t sent_bytes )
-{
-    ::std::cout << __func__ << " : "
-                << "Server sent " 
-                << sent_bytes << "bytes." 
+                << "Server received data : '" 
+                << data << "' from " << client_id
                 << ::std::endl;
 }
 
-void clientrecvCallBack( ::std::string data )
+void serverSendCallBack( const ::std::string& client_id, ::std::size_t sent_bytes )
+{
+    ::std::cout << __func__ << " : "
+                << "Server sent " 
+                << sent_bytes << "bytes to "
+                << client_id 
+                << ::std::endl;
+}
+
+void serverErrorCallBack( const ::std::string& client_id, const ::std::string& error )
+{
+    ::std::cout << "Received error : '" << error 
+                << "' from " << client_id << ::std::endl;
+}
+
+
+/*--------------------------*/
+/*--- Client's callbacks ---*/
+/*--------------------------*/
+void clientrecvCallBack( const ::std::string& , ::std::string data )
 {
     ::std::cout << __func__ << " : "
                 << "Client received data : " 
                 << data << ::std::endl;
 }
 
-void clientSendCallBack( ::std::size_t sent_bytes )
+void clientSendCallBack( const ::std::string& , ::std::size_t sent_bytes )
 {
     ::std::cout << __func__ << " : " 
                 << "Client sent " 
                 << sent_bytes << "bytes." 
                 << ::std::endl;
 }
+
+void clientErrorCallBack( const ::std::string& , const ::std::string& error)
+{
+    ::std::cout << "Received error from server : '" << error << ::std::endl;
+}
+
 
 #define LOOP_DELAY  ::std::chrono::milliseconds(100)
 
@@ -46,6 +67,7 @@ int main( int , char** )
         {
             .m_recv_cb      = serverrecvCallBack,
             .m_send_cb      = serverSendCallBack,
+            .m_error_cb     = serverErrorCallBack,
             .m_address      = "/tmp/UnixSocketServer",
             .m_delimiter    = "body",
             .m_id_key       = "auth"
@@ -58,6 +80,7 @@ int main( int , char** )
         {
             .m_recv_cb      = clientrecvCallBack,
             .m_send_cb      = clientSendCallBack,
+            .m_error_cb     = clientErrorCallBack,
             .m_address      = "/tmp/UnixSocketServer",
             .m_delimiter    = "body",
             .m_id_key       = "auth",

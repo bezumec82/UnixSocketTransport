@@ -11,21 +11,27 @@ Result Server::setConfig( Config&& cfg )
 
     if( ! m_config.m_recv_cb )
     {
-        PRINT_ERR( "No read callback provided.\n" );
+        PRINT_ERR( "No RECEIVE callback provided.\n" );
         return Result::CFG_ERROR;
     }
     if( ! m_config.m_send_cb )
     {
-        PRINT_ERR( "No send callback provided.\n" );
+        PRINT_ERR( "No SEND callback provided.\n" );
         return Result::CFG_ERROR;
     }
+    if( ! m_config.m_error_cb )
+    {
+        PRINT_ERR( "No ERROR callback provided.\n" );
+        return Result::CFG_ERROR;
+    }
+
     unlink( m_config.m_address.c_str() ); //prepare address upfront
     m_is_configured.store( true );
     PRINTF( GRN, "Configuration is accepted.\n" );
     return Result::ALL_GOOD;
 }
 
-Result Server::start( void )
+Result Server::start()
 {
     if( ! m_is_configured.load() )
     {
@@ -36,7 +42,10 @@ Result Server::start( void )
     // PRINTF( RED, "Starting Unix server '%s'", m_config.m_address.c_str() );
     m_acceptor_uptr = ::std::make_unique< Acceptor >( m_io_service , EndPoint{ m_config.m_address } );
     accept(); /* Recursive async call inside */
-    auto work = [&](){ m_io_service.run(); };
+    auto work = [&](){
+        m_io_service.run();
+    }; //end []
+
 #ifdef THREAD_IMPLEMENTATION
     m_worker = ::std::move( ::std::thread( work ) );
 #else
@@ -45,16 +54,17 @@ Result Server::start( void )
     return Result::ALL_GOOD;
 }
 
-void Server::accept ( void )
+void Server::accept ()
 {
     SessionHandle session_handle = m_sessions.emplace( m_sessions.end(), m_io_service, this  );
-    m_acceptor_uptr->async_accept( session_handle->getSocket(),
+    m_acceptor_uptr->async_accept( session_handle->m_socket,
         [&, session_handle ] ( const ErrCode& error ) //mutable
         {
             if ( !error )
             {
                 PRINTF( GRN, "Client accepted.\n" );
                 session_handle->saveHandle( session_handle );
+                session_handle->m_is_accepted.store( true );
                 session_handle->recv();
                 this->accept();
             }
@@ -65,13 +75,35 @@ void Server::accept ( void )
         } );
 }
 
+void Server::removeSession( SessionHandle& session )
+{
+    PRINTF( RED, "Removing session with client '%s'\n" \
+        session->m_client_id.c_str() );
+    ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
+    if( session->m_is_identified.load() )
+    {
+        auto iter = m_id_sessions_map.find( session->m_client_id );
+        if( iter == m_id_sessions_map.end() )
+        {
+            PRINT_ERR( "Can't find session with client : %s\n", \
+                session->m_client_id.c_str() );
+            return;
+        }
+        m_id_sessions_map.erase(iter);
+    }
+    m_sessions.erase( session );
+}
+
 Server::~Server()
 {
     /* Stop accepting */
     m_acceptor_uptr->cancel();
     m_acceptor_uptr->close();
-    /* Destroy all sessions */
-    m_sessions.clear();
+    
+    {/* Destroy all sessions */
+        ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
+        m_sessions.clear();
+    }
     /* Stop handling events */
     m_io_service.stop();
 #ifdef THREAD_IMPLEMENTATION

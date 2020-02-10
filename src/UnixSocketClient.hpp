@@ -17,7 +17,7 @@ void Client::send( Data&& data )
         {
             if ( !error ) /* All good */
             {
-                m_config.m_send_cb( bytes_transferred );
+                m_config.m_send_cb( m_config.m_client_id ,bytes_transferred );
                 PRINTF( GRN, "%lu bytes is sent.\n", bytes_transferred );
             }
             else

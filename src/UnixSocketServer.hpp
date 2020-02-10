@@ -10,6 +10,7 @@ namespace UnixSocket
 template< typename Data >
 Result Server::send( const ::std::string& client_name, Data&& data )
 {
+    ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
     /* Client should provide some kind recognition. */
     auto found = m_id_sessions_map.find( client_name );
     if( found != m_id_sessions_map.end() )
@@ -26,11 +27,24 @@ Result Server::send( const ::std::string& client_name, Data&& data )
 }
 
 template< typename Data >
-Result Server::broadCast( Data&& data )
+Result Server::multiCast( Data&& data )
 {
+    ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
     for( auto& it : m_id_sessions_map )
     {
         it.second->send( ::std::forward<Data>(data) );
+    }
+    return Result::SEND_SUCCESS;
+}
+
+template< typename Data >
+Result Server::broadCast( Data&& data )
+{
+    ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
+    for( auto& it : m_sessions )
+    {
+        if( it.m_is_accepted.load() )
+            it.send( ::std::forward<Data>(data) );
     }
     return Result::SEND_SUCCESS;
 }

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <sstream>
 #include <unordered_map>
+#include <mutex>
 
 #include <boost/asio.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -25,6 +26,8 @@ namespace UnixSocket
 
     class Server;
     class Client;
+    enum class Result;
+
 
     using IoService     = ::boost::asio::io_service;
     using ErrCode       = ::boost::system::error_code;
@@ -34,15 +37,19 @@ namespace UnixSocket
     using Acceptor      = ::boost::asio::local::stream_protocol::acceptor;
     using AcceptorUptr  = ::std::unique_ptr< Acceptor >;
 
-    using Tree = ::boost::property_tree::ptree;
-
     using Socket        = ::boost::asio::local::stream_protocol::socket;
     using SocketUptr    = ::std::unique_ptr< Socket >;
-    using RecvCallBack  = ::std::function< void( ::std::string ) >;
-    using SendCallBack  = ::std::function< void( ::std::size_t ) >;
 
-    using Buffer = ::std::string;
-    using BufferShPtr = ::std::shared_ptr< Buffer >;
+    using ClientId      = ::std::string;
+    using Tree          = ::boost::property_tree::ptree;
+
+    using RecvCallBack  = void( const ClientId&, ::std::string& );
+    using SendCallBack  = void( const ClientId&, ::std::size_t );
+    using ErrorDescription = ::std::string;
+    using ErrorCallBack = void( const ClientId&, const ErrorDescription& );
+
+    using Buffer        = ::std::string;
+    using BufferShPtr   = ::std::shared_ptr< Buffer >;
 }
 
 namespace UnixSocket
@@ -50,31 +57,36 @@ namespace UnixSocket
 
     enum class Result //: int8_t
     {
-        ID_FAILURE = -3,
+        SEND_ERROR      = -5,
+        RECV_ERROR      = -4,
+        ID_FAILURE      = -3,
         NO_SUCH_ADDRESS = -2,
-        CFG_ERROR = -1,
-        ALL_GOOD = 0,
-        SEND_SUCCESS = 1,
-        ID_SUCCESS = 2,
+        CFG_ERROR       = -1,
+        ALL_GOOD        = 0,
+        SEND_SUCCESS    = 1,
+        ID_SUCCESS      = 2,
     }; //end class Result
 
     class Server /* Default constructable */
     {
         class Session;
-        using SessionShptr = ::std::shared_ptr< Session >;
+
+    public :
         using Sessions = ::std::list< Session >;
         using SessionHandle = Sessions::iterator;
         using ConstSessionHandle = const SessionHandle;
-        using IdentifiedSessions = ::std::unordered_map< ::std::string, ConstSessionHandle >;
+        using IdentifiedSessions = ::std::unordered_map< ClientId, ConstSessionHandle >;
 
-    public :
+    public : /*--- Classes/structures/enumerators ---*/
         struct Config
         {
-            RecvCallBack    m_recv_cb;
-            SendCallBack    m_send_cb;
-            /*!
-             * TODO : Error callback - return errors to the user.
-             */
+            ::std::function< RecvCallBack >  m_recv_cb;
+            ::std::function< SendCallBack >  m_send_cb;
+
+            /* In this callback user should handle sessions enumeration.
+             * To handle it at the 'Server::session' side, mutex is necessary. */
+            ::std::function< ErrorCallBack > m_error_cb;
+
             ::std::string   m_address; //address of server in the file system
             ::std::string   m_delimiter;
                 /* Each message should have some kind of start-end sequence :
@@ -96,17 +108,14 @@ namespace UnixSocket
     private : /* No access to the Sessions from outside */
         class Session
         {
+            friend class Server;
         public : /*--- Methods ---*/
             Session( IoService& io_service, Server * parent )
-                : m_socket( io_service ),
+                : m_io_service_ref( io_service ),
+                m_socket( io_service ),
                 m_parent_ptr( parent )
             { }
-
-            Socket& getSocket( void )
-            {
-                return m_socket;
-            }
-            void recv( void );
+            void recv();
             Result identification( const ::std::string& );
             template< typename Data >
             void send( Data&& );
@@ -116,6 +125,7 @@ namespace UnixSocket
             }
             ~Session();
         private : /*--- Variables ---*/
+            IoService& m_io_service_ref;
             Socket m_socket;
             Server * m_parent_ptr;
             const int READ_BUF_SIZE = 1024;
@@ -123,62 +133,82 @@ namespace UnixSocket
             SessionHandle m_self;
                 // save iterator to yourself
                 // used in identification process
-            /*--- Flags ---*/
-            ::std::atomic< bool > m_is_identified{ false };;
+
+            ::std::string m_client_id; //Identification of remote client for this session
+            /* Sessions are stored at server side by principle : 'm_client_id' -> 'm_self' */
+        private : /*--- Flags ---*/
+            ::std::atomic< bool > m_is_identified{ false };
+
+            /* This flag is signalling that session is accepted, but client isn't identified yet. */
+            ::std::atomic< bool > m_is_accepted{ false };
+
+            /* This flag is signalling that session should be destroyed by 'Server' */
+            ::std::atomic< bool > m_is_valid{ true };
         }; /* end class Session */
 
-    public : /*--- Methods ---*/
-        /* Getters and Setters */
-        Result setConfig ( Config && );
-        Config& getConfig( void )
+    private : /*--- Getters and Setters ---*/
+        Config& getConfig()
         {
             return m_config;
         }
-        Sessions& getSessions( void )
+        Sessions& getSessions()
         {
             return m_sessions;
         }
-        IdentifiedSessions& getIdentifiedSessions( void )
+        IdentifiedSessions& getIdentifiedSessions()
         {
             return m_id_sessions_map;
         }
-        Result start( void );
+
+    public : /*--- Methods ---*/
+        Result setConfig ( Config && );
+        Result start();
         template< typename Data >
         Result send( const ::std::string& , Data&& );
         template< typename Data >
-        Result broadCast( Data&& );
+        Result broadCast( Data&& ); /* Send to all clients */
+        template< typename Data >
+        Result multiCast( Data&& ); /* Send to all identified clients */
+
         ~Server();
+
     private :
-        void accept( void );
+        void removeSession( SessionHandle& );
+        void accept();
 
     private : /*--- Variables ---*/
         
         Config m_config;
         AcceptorUptr m_acceptor_uptr;
-        Sessions m_sessions; /* Server should know about all opened sessions */
+
+         /* Server should know about all opened sessions */
+        Sessions m_sessions;
         IdentifiedSessions m_id_sessions_map;
+        ::std::mutex m_sessions_mtx; //protect access to the sessions data
+
         IoService m_io_service; /* Initialized with class creation */
         ::std::thread m_worker;
         ::std::future<void> m_future;
+
         /*--- Flags ---*/
         ::std::atomic< bool > m_is_configured{ false };
     }; //end class Server
-
-
 
     class Client /* Default constructable */
     {
     public :
         enum class ConnectType //: uint8_t
         {
-            ASYNC_CONNECT = 0,
-            SYNC_CONNECT = 1
+            ASYNC_CONNECT   = 0,
+            SYNC_CONNECT    = 1
         };
 
         struct Config
         {
-            RecvCallBack    m_recv_cb;
-            SendCallBack    m_send_cb;
+            ::std::function< RecvCallBack >   m_recv_cb;
+            ::std::function< SendCallBack >   m_send_cb;
+            ::std::function< ErrorCallBack >  m_error_cb;
+
             ::std::string   m_address; //file to connect to
             ::std::string   m_delimiter; //look 'Server::Config'
 
@@ -190,15 +220,15 @@ namespace UnixSocket
     public : /*--- Methods ---*/
 
         Result setConfig( Config&& );
-        Result start( void );
+        Result start();
 
         template< typename Data >
         void send( Data&& );
         ~Client();
     private :
         void connect( ConnectType );
-        void recv( void );
-        void identify( void );
+        void recv();
+        void identify();
 
     private : /*--- Variables ---*/
         Config m_config;

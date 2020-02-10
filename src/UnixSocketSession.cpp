@@ -34,7 +34,10 @@ void Server::Session::recv()
             {
                m_socket.shutdown( Socket::shutdown_receive );
             }
-            /* TODO : Call for user's error handler. */
+            m_parent_ptr->getConfig().m_error_cb( m_client_id, error.message().c_str() );
+            m_is_valid.store( false );
+            m_io_service_ref.post( \
+                ::std::bind( &Server::removeSession, m_parent_ptr, m_self) );
             return;
         } //end if( error )
 
@@ -42,7 +45,7 @@ void Server::Session::recv()
         {
             identification( * read_buf_shptr );
         } else { /* Give access to data after identification. */
-            m_parent_ptr->getConfig().m_recv_cb( * read_buf_shptr );
+            m_parent_ptr->getConfig().m_recv_cb( m_client_id, * read_buf_shptr );
         } //end if
         this->recv();
     } ); //end async_read_until
@@ -59,14 +62,17 @@ Result Server::Session::identification( const ::std::string& in_data )
             xml_stream( in_data.c_str(), in_data.size() );
     PropTree::read_xml( xml_stream, xml_tree );
     try {
-        ::std::string key = xml_tree.get<std::string>( m_parent_ptr->getConfig().m_id_key );
-        m_parent_ptr->getIdentifiedSessions().emplace(
-            ::std::make_pair(
-                key, 
-                m_self
-        ) );
+        this->m_client_id = xml_tree.get<std::string>( m_parent_ptr->getConfig().m_id_key );
+        {
+            ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
+            m_parent_ptr->getIdentifiedSessions().emplace(
+                ::std::make_pair(
+                    m_client_id, 
+                    m_self
+            ) );
+        }
         m_is_identified.store(true);
-        PRINTF( GRN, "Client '%s' successfully identified.\n", key.c_str() );
+        PRINTF( GRN, "Client '%s' successfully identified.\n", m_client_id.c_str() );
         return Result::ID_SUCCESS;
     } catch( const ::std::exception& e )
     {

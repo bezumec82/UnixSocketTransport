@@ -27,7 +27,7 @@ Result Client::setConfig( Config&& cfg )
     return Result::ALL_GOOD;
 }
 
-Result Client::start( void )
+Result Client::start()
 {
     if( ! m_is_configured.load() )
     {
@@ -100,7 +100,7 @@ void Client::connect( ConnectType conType )
     } //end switch
 }
 
-void Client::identify( void )
+void Client::identify()
 {
     Tree xml_tree;
     xml_tree.put( m_config.m_id_key, m_config.m_client_id );
@@ -111,7 +111,7 @@ void Client::identify( void )
 
 }
 
-void Client::recv( void )
+void Client::recv()
 {
     /* Usage of static buffer is abandoned in favour of multithread implementation. 
      * Each recv handler will have its own buffer */
@@ -136,7 +136,7 @@ void Client::recv( void )
             }
             return;
         }
-        m_config.m_recv_cb( * read_buf_shptr );
+        m_config.m_recv_cb( m_config.m_client_id, * read_buf_shptr );
         m_read_buf.clear();
         this->recv();
     } ); //end async_read_until
