@@ -77,7 +77,7 @@ void Server::accept ()
 
 void Server::removeSession( SessionHandle& session )
 {
-    PRINTF( RED, "Removing session with client '%s'\n" \
+    PRINTF( RED, "Removing session with client '%s'\n", \
         session->m_client_id.c_str() );
     ::std::unique_lock< ::std::mutex >( m_sessions_mtx );
     if( session->m_is_identified.load() )
