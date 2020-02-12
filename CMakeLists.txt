@@ -19,7 +19,7 @@ PUBLIC
 )
 target_link_libraries(
     ${PROJECT_NAME}
-LINK_PRIVATE
+LINK_PUBLIC
     Tools
     ${Boost_LIBRARIES}
 )
@@ -39,7 +39,7 @@ add_executable(
 )
 target_link_libraries(
     ${PROJECT_NAME}Test.out
-LINK_PRIVATE
+LINK_PUBLIC
     ${PROJECT_NAME}
     Tools
     ${Boost_LIBRARIES}
